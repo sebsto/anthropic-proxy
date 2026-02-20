@@ -7,14 +7,15 @@ import Foundation
 struct ResponseTranslator: Sendable {
 
     func translate(
-        _ response: BedrockInvokeResponse,
+        _ response: [String: JSONValue],
         originalModel: String
     ) -> ChatCompletionResponse {
-        let id = response.id.map { "chatcmpl-\($0)" }
+        let id = response["id"]?.stringValue.map { "chatcmpl-\($0)" }
             ?? "chatcmpl-\(UUID().uuidString)"
 
-        let textContent = extractTextContent(from: response.content)
-        let toolCalls = extractToolCalls(from: response.content)
+        let contentBlocks = response["content"]?.arrayValue
+        let textContent = extractTextContent(from: contentBlocks)
+        let toolCalls = extractToolCalls(from: contentBlocks)
 
         let message = ChatMessage(
             role: "assistant",
@@ -26,14 +27,18 @@ struct ResponseTranslator: Sendable {
             index: 0,
             message: message,
             delta: nil,
-            finishReason: mapFinishReason(response.stopReason)
+            finishReason: mapFinishReason(response["stop_reason"]?.stringValue)
         )
 
-        let usage = response.usage.map { anthropicUsage in
-            Usage(
-                promptTokens: anthropicUsage.inputTokens,
-                completionTokens: anthropicUsage.outputTokens,
-                totalTokens: anthropicUsage.inputTokens + anthropicUsage.outputTokens
+        let usage = response["usage"].flatMap { usageValue -> Usage? in
+            guard let inputTokens = usageValue["input_tokens"]?.intValue,
+                  let outputTokens = usageValue["output_tokens"]?.intValue else {
+                return nil
+            }
+            return Usage(
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: inputTokens + outputTokens
             )
         }
 
@@ -66,39 +71,34 @@ struct ResponseTranslator: Sendable {
 
     // MARK: - Private
 
-    private func extractTextContent(
-        from blocks: [AnthropicContentBlock]?
-    ) -> String? {
+    private func extractTextContent(from blocks: [JSONValue]?) -> String? {
         guard let blocks else { return nil }
 
         let texts = blocks.compactMap { block -> String? in
-            if case .text(let textBlock) = block {
-                return textBlock.text
-            }
-            return nil
+            guard block["type"]?.stringValue == "text" else { return nil }
+            return block["text"]?.stringValue
         }
 
         guard !texts.isEmpty else { return nil }
         return texts.joined()
     }
 
-    private func extractToolCalls(
-        from blocks: [AnthropicContentBlock]?
-    ) -> [ToolCall]? {
+    private func extractToolCalls(from blocks: [JSONValue]?) -> [ToolCall]? {
         guard let blocks else { return nil }
 
         let calls = blocks.compactMap { block -> ToolCall? in
-            if case .toolUse(let toolUseBlock) = block {
-                return ToolCall(
-                    id: toolUseBlock.id,
-                    type: "function",
-                    function: FunctionCall(
-                        name: toolUseBlock.name,
-                        arguments: serializeJSONValue(toolUseBlock.input)
-                    )
+            guard block["type"]?.stringValue == "tool_use" else { return nil }
+            let id = block["id"]?.stringValue ?? ""
+            let name = block["name"]?.stringValue ?? ""
+            let input = block["input"] ?? .object([:])
+            return ToolCall(
+                id: id,
+                type: "function",
+                function: FunctionCall(
+                    name: name,
+                    arguments: serializeJSONValue(input)
                 )
-            }
-            return nil
+            )
         }
 
         guard !calls.isEmpty else { return nil }

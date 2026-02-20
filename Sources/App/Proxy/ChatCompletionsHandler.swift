@@ -194,10 +194,10 @@ struct ChatCompletionsHandler<Signer: RequestSigning, Client: HTTPRequestSending
         }
 
         // 10. Decode Bedrock response
-        let bedrockResult: BedrockInvokeResponse
+        let bedrockResult: [String: JSONValue]
         do {
             bedrockResult = try JSONDecoder().decode(
-                BedrockInvokeResponse.self,
+                [String: JSONValue].self,
                 from: responseBody
             )
         } catch {
@@ -318,7 +318,7 @@ struct ChatCompletionsHandler<Signer: RequestSigning, Client: HTTPRequestSending
                     }
 
                     let event = try JSONDecoder().decode(
-                        AnthropicStreamEvent.self,
+                        [String: JSONValue].self,
                         from: jsonData
                     )
                     let sseLines = sseEncoder.encode(event, state: &state)

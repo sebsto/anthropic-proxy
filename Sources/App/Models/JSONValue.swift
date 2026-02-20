@@ -77,4 +77,41 @@ enum JSONValue: Sendable, Codable, Equatable {
             try container.encode(value)
         }
     }
+
+    // MARK: - Convenience Accessors
+
+    var stringValue: String? {
+        if case .string(let v) = self { return v }
+        return nil
+    }
+
+    var intValue: Int? {
+        if case .number(let v) = self { return Int(exactly: v) }
+        return nil
+    }
+
+    var doubleValue: Double? {
+        if case .number(let v) = self { return v }
+        return nil
+    }
+
+    var boolValue: Bool? {
+        if case .bool(let v) = self { return v }
+        return nil
+    }
+
+    var arrayValue: [JSONValue]? {
+        if case .array(let v) = self { return v }
+        return nil
+    }
+
+    var objectValue: [String: JSONValue]? {
+        if case .object(let v) = self { return v }
+        return nil
+    }
+
+    subscript(_ key: String) -> JSONValue? {
+        if case .object(let dict) = self { return dict[key] }
+        return nil
+    }
 }

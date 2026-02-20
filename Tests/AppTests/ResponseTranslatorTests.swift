@@ -13,15 +13,23 @@ struct ResponseTranslatorTests {
 
     @Test("Basic text response translated to OpenAI format")
     func testBasicTextResponse() throws {
-        let bedrockResponse = BedrockInvokeResponse(
-            id: "msg_123",
-            type: "message",
-            role: "assistant",
-            content: [.text(TextBlock(text: "Hello, world!"))],
-            model: "anthropic.claude-sonnet-4-5-20250514-v1:0",
-            stopReason: "end_turn",
-            usage: AnthropicUsage(inputTokens: 10, outputTokens: 20)
-        )
+        let bedrockResponse: [String: JSONValue] = [
+            "id": .string("msg_123"),
+            "type": .string("message"),
+            "role": .string("assistant"),
+            "content": .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Hello, world!"),
+                ]),
+            ]),
+            "model": .string("anthropic.claude-sonnet-4-5-20250514-v1:0"),
+            "stop_reason": .string("end_turn"),
+            "usage": .object([
+                "input_tokens": .number(10),
+                "output_tokens": .number(20),
+            ]),
+        ]
 
         let result = ResponseTranslator().translate(bedrockResponse, originalModel: "claude-sonnet-4-5-20250514")
 
@@ -37,14 +45,19 @@ struct ResponseTranslatorTests {
 
     @Test("Original model name echoed in response, not Bedrock model")
     func testOriginalModelEchoed() throws {
-        let bedrockResponse = BedrockInvokeResponse(
-            id: "msg_456",
-            type: "message",
-            role: "assistant",
-            content: [.text(TextBlock(text: "Hi"))],
-            model: "anthropic.claude-sonnet-4-5-20250514-v1:0",
-            stopReason: "end_turn"
-        )
+        let bedrockResponse: [String: JSONValue] = [
+            "id": .string("msg_456"),
+            "type": .string("message"),
+            "role": .string("assistant"),
+            "content": .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Hi"),
+                ]),
+            ]),
+            "model": .string("anthropic.claude-sonnet-4-5-20250514-v1:0"),
+            "stop_reason": .string("end_turn"),
+        ]
 
         let result = ResponseTranslator().translate(bedrockResponse, originalModel: "anthropic/claude-sonnet-4-5-20250514")
 
@@ -70,20 +83,21 @@ struct ResponseTranslatorTests {
             "query": .string("weather in SF"),
         ])
 
-        let bedrockResponse = BedrockInvokeResponse(
-            id: "msg_789",
-            type: "message",
-            role: "assistant",
-            content: [
-                .toolUse(ToolUseBlock(
-                    id: "toolu_01",
-                    name: "get_weather",
-                    input: toolInput
-                )),
-            ],
-            model: "anthropic.claude-sonnet-4-5-20250514-v1:0",
-            stopReason: "tool_use"
-        )
+        let bedrockResponse: [String: JSONValue] = [
+            "id": .string("msg_789"),
+            "type": .string("message"),
+            "role": .string("assistant"),
+            "content": .array([
+                .object([
+                    "type": .string("tool_use"),
+                    "id": .string("toolu_01"),
+                    "name": .string("get_weather"),
+                    "input": toolInput,
+                ]),
+            ]),
+            "model": .string("anthropic.claude-sonnet-4-5-20250514-v1:0"),
+            "stop_reason": .string("tool_use"),
+        ]
 
         let result = ResponseTranslator().translate(bedrockResponse, originalModel: "claude-sonnet-4-5-20250514")
 
@@ -103,15 +117,23 @@ struct ResponseTranslatorTests {
 
     @Test("Anthropic usage translated to OpenAI usage format")
     func testUsageTranslation() throws {
-        let bedrockResponse = BedrockInvokeResponse(
-            id: "msg_usage",
-            type: "message",
-            role: "assistant",
-            content: [.text(TextBlock(text: "Hi"))],
-            model: "anthropic.claude-sonnet-4-5-20250514-v1:0",
-            stopReason: "end_turn",
-            usage: AnthropicUsage(inputTokens: 42, outputTokens: 58)
-        )
+        let bedrockResponse: [String: JSONValue] = [
+            "id": .string("msg_usage"),
+            "type": .string("message"),
+            "role": .string("assistant"),
+            "content": .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Hi"),
+                ]),
+            ]),
+            "model": .string("anthropic.claude-sonnet-4-5-20250514-v1:0"),
+            "stop_reason": .string("end_turn"),
+            "usage": .object([
+                "input_tokens": .number(42),
+                "output_tokens": .number(58),
+            ]),
+        ]
 
         let result = ResponseTranslator().translate(bedrockResponse, originalModel: "claude-sonnet-4-5-20250514")
 
@@ -127,22 +149,29 @@ struct ResponseTranslatorTests {
     func testMixedContentBlocks() throws {
         let toolInput: JSONValue = .object(["city": .string("London")])
 
-        let bedrockResponse = BedrockInvokeResponse(
-            id: "msg_mixed",
-            type: "message",
-            role: "assistant",
-            content: [
-                .text(TextBlock(text: "Let me check ")),
-                .text(TextBlock(text: "the weather.")),
-                .toolUse(ToolUseBlock(
-                    id: "toolu_02",
-                    name: "weather",
-                    input: toolInput
-                )),
-            ],
-            model: "anthropic.claude-sonnet-4-5-20250514-v1:0",
-            stopReason: "tool_use"
-        )
+        let bedrockResponse: [String: JSONValue] = [
+            "id": .string("msg_mixed"),
+            "type": .string("message"),
+            "role": .string("assistant"),
+            "content": .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Let me check "),
+                ]),
+                .object([
+                    "type": .string("text"),
+                    "text": .string("the weather."),
+                ]),
+                .object([
+                    "type": .string("tool_use"),
+                    "id": .string("toolu_02"),
+                    "name": .string("weather"),
+                    "input": toolInput,
+                ]),
+            ]),
+            "model": .string("anthropic.claude-sonnet-4-5-20250514-v1:0"),
+            "stop_reason": .string("tool_use"),
+        ]
 
         let result = ResponseTranslator().translate(bedrockResponse, originalModel: "claude-sonnet-4-5-20250514")
 

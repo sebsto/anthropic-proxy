@@ -76,10 +76,10 @@ struct EventStreamParserTests {
         let result = try EventStreamParser().parseFrame(&buffer)
         let data = try #require(result)
 
-        let decoded = try JSONDecoder().decode(ContentBlockDeltaEvent.self, from: data)
-        #expect(decoded.delta.type == "text_delta")
-        #expect(decoded.delta.text == "Hello")
-        #expect(decoded.index == 0)
+        let decoded = try JSONDecoder().decode([String: JSONValue].self, from: data)
+        #expect(decoded["delta"]?["type"]?.stringValue == "text_delta")
+        #expect(decoded["delta"]?["text"]?.stringValue == "Hello")
+        #expect(decoded["index"]?.intValue == 0)
     }
 
     @Test("Parse two frames back-to-back from a single ByteBuffer")
@@ -108,13 +108,13 @@ struct EventStreamParserTests {
 
         let result1 = try EventStreamParser().parseFrame(&combined)
         let data1 = try #require(result1)
-        let event1 = try JSONDecoder().decode(ContentBlockDeltaEvent.self, from: data1)
-        #expect(event1.delta.text == "Hi")
+        let event1 = try JSONDecoder().decode([String: JSONValue].self, from: data1)
+        #expect(event1["delta"]?["text"]?.stringValue == "Hi")
 
         let result2 = try EventStreamParser().parseFrame(&combined)
         let data2 = try #require(result2)
-        let event2 = try JSONDecoder().decode(ContentBlockDeltaEvent.self, from: data2)
-        #expect(event2.delta.text == " there")
+        let event2 = try JSONDecoder().decode([String: JSONValue].self, from: data2)
+        #expect(event2["delta"]?["text"]?.stringValue == " there")
     }
 
     @Test("Partial frame buffering across two chunks yields correct event")
@@ -153,8 +153,8 @@ struct EventStreamParserTests {
         }
 
         #expect(events.count == 1)
-        let decoded = try JSONDecoder().decode(ContentBlockDeltaEvent.self, from: events[0])
-        #expect(decoded.delta.text == "buffered")
+        let decoded = try JSONDecoder().decode([String: JSONValue].self, from: events[0])
+        #expect(decoded["delta"]?["text"]?.stringValue == "buffered")
     }
 
     @Test("Exception frame throws EventStreamError")

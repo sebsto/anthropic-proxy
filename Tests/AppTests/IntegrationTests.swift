@@ -34,35 +34,44 @@ struct OpenAISSEEncoderTests {
         id: String = "msg_123",
         inputTokens: Int = 100,
         outputTokens: Int = 1
-    ) -> AnthropicStreamEvent {
-        .messageStart(MessageStartEvent(
-            type: "message_start",
-            message: BedrockInvokeResponse(
-                id: id,
-                type: "message",
-                role: "assistant",
-                content: [],
-                model: "claude-test",
-                stopReason: nil,
-                usage: AnthropicUsage(inputTokens: inputTokens, outputTokens: outputTokens)
-            )
-        ))
+    ) -> [String: JSONValue] {
+        [
+            "type": .string("message_start"),
+            "message": .object([
+                "id": .string(id),
+                "type": .string("message"),
+                "role": .string("assistant"),
+                "content": .array([]),
+                "model": .string("claude-test"),
+                "usage": .object([
+                    "input_tokens": .number(Double(inputTokens)),
+                    "output_tokens": .number(Double(outputTokens)),
+                ]),
+            ]),
+        ]
     }
 
-    private func makeContentBlockDelta(text: String, index: Int = 0) -> AnthropicStreamEvent {
-        .contentBlockDelta(ContentBlockDeltaEvent(
-            type: "content_block_delta",
-            index: index,
-            delta: DeltaPayload(type: "text_delta", text: text)
-        ))
+    private func makeContentBlockDelta(text: String, index: Int = 0) -> [String: JSONValue] {
+        [
+            "type": .string("content_block_delta"),
+            "index": .number(Double(index)),
+            "delta": .object([
+                "type": .string("text_delta"),
+                "text": .string(text),
+            ]),
+        ]
     }
 
-    private func makeMessageDelta(stopReason: String, outputTokens: Int = 10) -> AnthropicStreamEvent {
-        .messageDelta(MessageDeltaEvent(
-            type: "message_delta",
-            delta: MessageDeltaPayload(stopReason: stopReason),
-            usage: AnthropicUsage(inputTokens: 0, outputTokens: outputTokens)
-        ))
+    private func makeMessageDelta(stopReason: String, outputTokens: Int = 10) -> [String: JSONValue] {
+        [
+            "type": .string("message_delta"),
+            "delta": .object([
+                "stop_reason": .string(stopReason),
+            ]),
+            "usage": .object([
+                "output_tokens": .number(Double(outputTokens)),
+            ]),
+        ]
     }
 
     // MARK: - testMessageStartChunk
@@ -130,7 +139,8 @@ struct OpenAISSEEncoderTests {
         _ = encoder.encode(makeMessageStartEvent(inputTokens: 50, outputTokens: 1), state: &state)
         _ = encoder.encode(makeMessageDelta(stopReason: "end_turn", outputTokens: 25), state: &state)
 
-        let lines = encoder.encode(.messageStop, state: &state)
+        let messageStop: [String: JSONValue] = ["type": .string("message_stop")]
+        let lines = encoder.encode(messageStop, state: &state)
         #expect(lines.count == 2)
 
         // First line: usage chunk
@@ -154,7 +164,8 @@ struct OpenAISSEEncoderTests {
 
         _ = encoder.encode(makeMessageStartEvent(), state: &state)
 
-        let lines = encoder.encode(.messageStop, state: &state)
+        let messageStop: [String: JSONValue] = ["type": .string("message_stop")]
+        let lines = encoder.encode(messageStop, state: &state)
         #expect(lines.count == 1)
         #expect(lines[0] == "data: [DONE]\n\n")
     }
@@ -171,14 +182,15 @@ struct OpenAISSEEncoderTests {
         allLines += encoder.encode(makeMessageStartEvent(inputTokens: 100, outputTokens: 1), state: &state)
 
         // 2. content_block_start (text)
-        allLines += encoder.encode(
-            .contentBlockStart(ContentBlockStartEvent(
-                type: "content_block_start",
-                index: 0,
-                contentBlock: .text(TextBlock(text: ""))
-            )),
-            state: &state
-        )
+        let contentBlockStart: [String: JSONValue] = [
+            "type": .string("content_block_start"),
+            "index": .number(0),
+            "content_block": .object([
+                "type": .string("text"),
+                "text": .string(""),
+            ]),
+        ]
+        allLines += encoder.encode(contentBlockStart, state: &state)
 
         // 3. content_block_delta: "Hey"
         allLines += encoder.encode(makeContentBlockDelta(text: "Hey"), state: &state)
@@ -190,16 +202,18 @@ struct OpenAISSEEncoderTests {
         allLines += encoder.encode(makeContentBlockDelta(text: ", thanks for asking."), state: &state)
 
         // 6. content_block_stop
-        allLines += encoder.encode(
-            .contentBlockStop(ContentBlockStopEvent(type: "content_block_stop", index: 0)),
-            state: &state
-        )
+        let contentBlockStop: [String: JSONValue] = [
+            "type": .string("content_block_stop"),
+            "index": .number(0),
+        ]
+        allLines += encoder.encode(contentBlockStop, state: &state)
 
         // 7. message_delta
         allLines += encoder.encode(makeMessageDelta(stopReason: "end_turn", outputTokens: 15), state: &state)
 
         // 8. message_stop
-        allLines += encoder.encode(.messageStop, state: &state)
+        let messageStop: [String: JSONValue] = ["type": .string("message_stop")]
+        allLines += encoder.encode(messageStop, state: &state)
 
         // Filter out empty entries (contentBlockStart for text returns [])
         let nonEmpty = allLines.filter { !$0.isEmpty }

@@ -20,35 +20,37 @@ struct OpenAISSEEncoder: Sendable {
 
     var doneSignal: String { "data: [DONE]\n\n" }
 
-    func encode(_ event: AnthropicStreamEvent, state: inout StreamState) -> [String] {
-        switch event {
-        case .messageStart(let event):
+    func encode(_ event: [String: JSONValue], state: inout StreamState) -> [String] {
+        switch event["type"]?.stringValue {
+        case "message_start":
             return encodeMessageStart(event, state: &state)
-        case .contentBlockStart(let event):
+        case "content_block_start":
             return encodeContentBlockStart(event, state: &state)
-        case .contentBlockDelta(let event):
+        case "content_block_delta":
             return encodeContentBlockDelta(event, state: &state)
-        case .contentBlockStop:
+        case "content_block_stop":
             return encodeContentBlockStop(state: &state)
-        case .messageDelta(let event):
+        case "message_delta":
             return encodeMessageDelta(event, state: &state)
-        case .messageStop:
+        case "message_stop":
             return encodeMessageStop(state: &state)
+        default:
+            return []
         }
     }
 
     // MARK: - Event Handlers
 
     private func encodeMessageStart(
-        _ event: MessageStartEvent,
+        _ event: [String: JSONValue],
         state: inout StreamState
     ) -> [String] {
-        let message = event.message
+        let message = event["message"]
 
-        state.id = "chatcmpl-\(message.id ?? UUID().uuidString)"
+        state.id = "chatcmpl-\(message?["id"]?.stringValue ?? UUID().uuidString)"
         state.model = originalModel
         state.created = Int(Date().timeIntervalSince1970)
-        state.inputTokens = message.usage?.inputTokens ?? 0
+        state.inputTokens = message?["usage"]?["input_tokens"]?.intValue ?? 0
 
         let choice = Choice(
             index: 0,
@@ -60,22 +62,24 @@ struct OpenAISSEEncoder: Sendable {
     }
 
     private func encodeContentBlockStart(
-        _ event: ContentBlockStartEvent,
+        _ event: [String: JSONValue],
         state: inout StreamState
     ) -> [String] {
-        switch event.contentBlock {
-        case .text:
-            state.currentBlockIsToolUse = false
-            return []
+        let contentBlock = event["content_block"]
+        let blockType = contentBlock?["type"]?.stringValue
 
-        case .toolUse(let block):
+        switch blockType {
+        case "tool_use":
             state.currentBlockIsToolUse = true
+
+            let id = contentBlock?["id"]?.stringValue ?? ""
+            let name = contentBlock?["name"]?.stringValue ?? ""
 
             let streamingToolCall = StreamingToolCall(
                 index: state.toolCallIndex,
-                id: block.id,
+                id: id,
                 type: "function",
-                function: StreamingFunctionCall(name: block.name, arguments: "")
+                function: StreamingFunctionCall(name: name, arguments: "")
             )
 
             let choice = Choice(
@@ -89,19 +93,22 @@ struct OpenAISSEEncoder: Sendable {
 
             return [makeChunk(state: state, choices: [choice])]
 
-        case .toolResult:
+        default:
             state.currentBlockIsToolUse = false
             return []
         }
     }
 
     private func encodeContentBlockDelta(
-        _ event: ContentBlockDeltaEvent,
+        _ event: [String: JSONValue],
         state: inout StreamState
     ) -> [String] {
-        switch event.delta.type {
+        let delta = event["delta"]
+        let deltaType = delta?["type"]?.stringValue
+
+        switch deltaType {
         case "text_delta":
-            let text = event.delta.text ?? ""
+            let text = delta?["text"]?.stringValue ?? ""
             let choice = Choice(
                 index: 0,
                 delta: ChatMessage(role: "assistant", content: .string(text)),
@@ -110,7 +117,7 @@ struct OpenAISSEEncoder: Sendable {
             return [makeChunk(state: state, choices: [choice])]
 
         case "input_json_delta":
-            let json = event.delta.partialJson ?? ""
+            let json = delta?["partial_json"]?.stringValue ?? ""
             let streamingToolCall = StreamingToolCall(
                 index: state.toolCallIndex,
                 function: StreamingFunctionCall(arguments: json)
@@ -139,14 +146,17 @@ struct OpenAISSEEncoder: Sendable {
     }
 
     private func encodeMessageDelta(
-        _ event: MessageDeltaEvent,
+        _ event: [String: JSONValue],
         state: inout StreamState
     ) -> [String] {
-        if let usage = event.usage {
-            state.outputTokens = usage.outputTokens
+        let delta = event["delta"]
+        let usage = event["usage"]
+
+        if let outputTokens = usage?["output_tokens"]?.intValue {
+            state.outputTokens = outputTokens
         }
 
-        let finishReason = ResponseTranslator().mapFinishReason(event.delta.stopReason)
+        let finishReason = ResponseTranslator().mapFinishReason(delta?["stop_reason"]?.stringValue)
 
         let choice = Choice(
             index: 0,
