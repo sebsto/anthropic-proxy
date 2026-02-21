@@ -1,0 +1,39 @@
+name: Build And Test on GitHub
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+
+# env:
+#   DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
+
+jobs:
+
+  build:
+    # disabled because libunxip doesn't compile on Linux
+    if: false 
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Build
+      run: |
+        swift build -c release
+
+  # disabled until this project compiles on Linux
+  test:
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Run tests
+      run: |
+        swift test
