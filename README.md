@@ -241,7 +241,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
    ```bash
    swift run App
-   curl http://127.0.0.1:8080/v1/models
+   curl -H "x-api-key: my-secret-key" http://127.0.0.1:8080/v1/models
    ```
 
    If you see an empty model list or errors, check that your credentials are valid and that Bedrock model access is enabled in the correct region.
