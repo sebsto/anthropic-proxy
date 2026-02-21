@@ -120,6 +120,7 @@ Build and run with [Apple Container](https://github.com/apple/container):
 container build --tag anthopric-proxy -f ./Containerfile
 
 # Run (pass AWS credentials via environment)
+eval $(aws configure export-credentials --profile work --format env)
 container run \
   -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID \
@@ -166,7 +167,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   -H "x-api-key: my-secret-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-sonnet-4-5-20250514",
+    "model": "anthropic.claude-sonnet-4-6",
     "stream": true,
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
@@ -182,7 +183,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   -H "x-api-key: my-secret-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-sonnet-4-5-20250514",
+    "model": "anthropic.claude-sonnet-4-6",
     "stream": false,
     "messages": [
       {"role": "user", "content": "What is 2 + 2?"}
@@ -195,7 +196,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   "id": "chatcmpl-msg_abc123",
   "object": "chat.completion",
   "created": 1740063600,
-  "model": "claude-sonnet-4-5-20250514",
+  "model": "anthropic.claude-sonnet-4-6",
   "choices": [
     {
       "index": 0,
