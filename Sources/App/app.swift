@@ -50,8 +50,8 @@ struct ProxyCommand: AsyncParsableCommand {
         } catch {
             logger.critical("Failed to resolve AWS credentials. If running in a container, ensure AWS credentials are available via environment variables (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY), a mounted ~/.aws directory, or an instance profile (IMDS).")
             logger.critical("Credential error: \(error)")
-            try await httpClient.shutdown().get()
-            try await signingClient.shutdown()
+            try? await signingClient.shutdown()
+            try? await httpClient.shutdown().get()
             throw ExitCode.failure
         }
 

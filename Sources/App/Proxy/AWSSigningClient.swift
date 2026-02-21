@@ -43,17 +43,13 @@ struct AWSSigningClient: Sendable {
         self.region = region
         self.logger = logger
 
-        let credentialProvider: CredentialProviderFactory
-        if let profile {
-            credentialProvider = .selector(
-                .environment,
-                .configFile(profile: profile),
-                .sso(profileName: profile),
-                .login(profileName: profile)
-            )
-        } else {
-            credentialProvider = .default
-        }
+        let resolvedProfile = profile ?? "default"
+        let credentialProvider: CredentialProviderFactory = .selector(
+            .environment,
+            .configFile(profile: resolvedProfile),
+            .sso(profileName: resolvedProfile),
+            .login(profileName: resolvedProfile)
+        )
 
         self.awsClient = AWSClient(
             credentialProvider: credentialProvider,
