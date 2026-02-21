@@ -15,8 +15,6 @@ on:
 jobs:
 
   build:
-    # disabled because libunxip doesn't compile on Linux
-    if: false 
     runs-on: ubuntu-latest
     container: swift:6.2-noble
 
