@@ -321,4 +321,114 @@ struct RequestTranslatorTests {
         #expect(result.bedrockBody.messages.count == 1)
         #expect(result.originalModel == "claude-sonnet-4-5-20250514")
     }
+
+    // MARK: - Tool Result Merging
+
+    @Test("Adjacent tool results merged into single user message")
+    func testAdjacentToolResultsMerged() throws {
+        let request = try json("""
+        {
+            "model": "claude-sonnet-4-5-20250514",
+            "messages": [
+                {"role": "user", "content": "Call both tools"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{\\"q\\":\\"cats\\"}"}},
+                        {"id": "call_2", "type": "function", "function": {"name": "weather", "arguments": "{\\"city\\":\\"Paris\\"}"}}
+                    ]
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "Found cats"},
+                {"role": "tool", "tool_call_id": "call_2", "content": "Sunny 25C"}
+            ]
+        }
+        """)
+
+        let result = try RequestTranslator().translate(request, bedrockModelId: defaultBedrockModelId)
+
+        #expect(result.bedrockBody.messages.count == 3)
+        let lastMessage = result.bedrockBody.messages[2]
+        #expect(lastMessage.role == "user")
+
+        guard case .blocks(let blocks) = lastMessage.content else {
+            Issue.record("Expected .blocks content for merged tool results")
+            return
+        }
+        #expect(blocks.count == 2)
+
+        guard case .toolResult(let first) = blocks[0] else {
+            Issue.record("Expected first block to be toolResult")
+            return
+        }
+        #expect(first.toolUseId == "call_1")
+
+        guard case .toolResult(let second) = blocks[1] else {
+            Issue.record("Expected second block to be toolResult")
+            return
+        }
+        #expect(second.toolUseId == "call_2")
+    }
+
+    // MARK: - Assistant Text + Tool Calls
+
+    @Test("Assistant message with text and tool calls produces both block types")
+    func testAssistantTextAndToolCalls() throws {
+        let request = try json("""
+        {
+            "model": "claude-sonnet-4-5-20250514",
+            "messages": [
+                {"role": "user", "content": "Help me"},
+                {
+                    "role": "assistant",
+                    "content": "Let me search for that",
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{\\"q\\":\\"help\\"}"}}
+                    ]
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "Results here"},
+                {"role": "user", "content": "Thanks"}
+            ]
+        }
+        """)
+
+        let result = try RequestTranslator().translate(request, bedrockModelId: defaultBedrockModelId)
+
+        let assistantMessage = result.bedrockBody.messages[1]
+        guard case .blocks(let blocks) = assistantMessage.content else {
+            Issue.record("Expected .blocks content for assistant message")
+            return
+        }
+
+        var hasText = false
+        var hasToolUse = false
+        for block in blocks {
+            switch block {
+            case .text(let tb):
+                if tb.text == "Let me search for that" { hasText = true }
+            case .toolUse(let tu):
+                if tu.name == "search" { hasToolUse = true }
+            default:
+                break
+            }
+        }
+        #expect(hasText, "Expected a text block with 'Let me search for that'")
+        #expect(hasToolUse, "Expected a toolUse block with name 'search'")
+    }
+
+    // MARK: - max_completion_tokens Fallback
+
+    @Test("max_completion_tokens used when max_tokens absent")
+    func testMaxCompletionTokensFallback() throws {
+        let request = try json("""
+        {
+            "model": "claude-sonnet-4-5-20250514",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_completion_tokens": 2048
+        }
+        """)
+
+        let result = try RequestTranslator().translate(request, bedrockModelId: defaultBedrockModelId)
+        #expect(result.bedrockBody.maxTokens == 2048)
+    }
 }

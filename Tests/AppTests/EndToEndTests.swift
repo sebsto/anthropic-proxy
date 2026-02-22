@@ -225,4 +225,234 @@ struct EndToEndTests {
             #expect(decoded.error.message.contains("model"))
         }
     }
+
+    @Test("Invalid JSON body returns 400 error")
+    func testInvalidJSONBodyReturns400() async throws {
+        let mockClient = MockHTTPClient { _ in
+            fatalError("Should not reach Bedrock for invalid JSON body")
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = ByteBuffer(string: "this is not json")
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .badRequest)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "invalid_request_error")
+        }
+    }
+
+    @Test("Bedrock 429 mapped to rate limit error")
+    func testBedrock429MappedToRateLimit() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"message": "Too many requests"}"#)
+            return HTTPClientResponse(
+                status: .tooManyRequests,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .tooManyRequests)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "rate_limit_error")
+            #expect(decoded.error.code == "rate_limit_exceeded")
+            #expect(decoded.error.message.contains("Too many requests"))
+        }
+    }
+
+    @Test("Bedrock 400 mapped to invalid request error")
+    func testBedrock400MappedToInvalidRequest() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"message": "Malformed input request"}"#)
+            return HTTPClientResponse(
+                status: .badRequest,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .badRequest)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "invalid_request_error")
+            #expect(decoded.error.message.contains("Malformed input request"))
+        }
+    }
+
+    @Test("Bedrock 403 mapped to server error (access denied)")
+    func testBedrock403MappedToServerError() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"Message": "Access denied"}"#)
+            return HTTPClientResponse(
+                status: .forbidden,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .internalServerError)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "server_error")
+            #expect(decoded.error.message.contains("Access denied"))
+        }
+    }
+
+    @Test("Bedrock 404 mapped to model not found")
+    func testBedrock404MappedToModelNotFound() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"message": "Could not resolve the foundation model"}"#)
+            return HTTPClientResponse(
+                status: .notFound,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .notFound)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "invalid_request_error")
+            #expect(decoded.error.code == "model_not_found")
+        }
+    }
+
+    @Test("Bedrock 408 mapped to timeout error")
+    func testBedrock408MappedToTimeout() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"message": "Request timed out"}"#)
+            return HTTPClientResponse(
+                status: .requestTimeout,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .requestTimeout)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "server_error")
+            #expect(decoded.error.code == "timeout")
+        }
+    }
+
+    @Test("Bedrock 500 mapped to server error")
+    func testBedrock500MappedToServerError() async throws {
+        let mockClient = MockHTTPClient { _ in
+            let errorBody = ByteBuffer(string: #"{"message": "Internal failure"}"#)
+            return HTTPClientResponse(
+                status: .internalServerError,
+                headers: HTTPHeaders([("content-type", "application/json")]),
+                body: .bytes(errorBody)
+            )
+        }
+
+        let app = buildTestApp(mockClient: mockClient)
+
+        try await app.test(.router) { client in
+            let requestBody = try makeOpenAIRequestBody(
+                model: "anthropic.claude-sonnet-4-5-20250514-v1:0"
+            )
+
+            let response = try await client.executeRequest(
+                uri: "/v1/chat/completions",
+                method: .post,
+                headers: [.contentType: "application/json", HTTPField.Name("x-api-key")!: testAPIKey],
+                body: requestBody
+            )
+
+            #expect(response.status == .internalServerError)
+
+            let responseData = Data(buffer: response.body)
+            let decoded = try JSONDecoder().decode(OpenAIErrorResponse.self, from: responseData)
+            #expect(decoded.error.type == "server_error")
+        }
+    }
 }

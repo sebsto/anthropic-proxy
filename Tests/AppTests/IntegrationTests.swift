@@ -8,6 +8,11 @@ import Testing
 
 // MARK: - Helpers
 
+/// Decode a JSON string into `[String: JSONValue]` for use as an event fixture.
+private func json(_ string: String) throws -> [String: JSONValue] {
+    try JSONDecoder().decode([String: JSONValue].self, from: Data(string.utf8))
+}
+
 /// Decode an SSE data line ("data: {...}\n\n") into a ChatCompletionResponse.
 private func decodeSSELine(_ line: String) throws -> ChatCompletionResponse {
     let prefix = "data: "
@@ -258,5 +263,67 @@ struct OpenAISSEEncoderTests {
         #expect(models.count == 1)
         #expect(createdValues.count == 1)
         #expect(models.first == testModel)
+    }
+
+    // MARK: - testToolUseStreamingLifecycle
+
+    @Test("Tool use streaming lifecycle produces correct SSE chunks")
+    func testToolUseStreamingLifecycle() throws {
+        let encoder = OpenAISSEEncoder(originalModel: testModel, includeUsage: true)
+        var state = StreamState()
+
+        // 1. message_start
+        let messageStartEvent = try json("""
+        {"type": "message_start", "message": {"id": "msg_123", "usage": {"input_tokens": 10}}}
+        """)
+        let messageStartLines = encoder.encode(messageStartEvent, state: &state)
+        #expect(messageStartLines.count == 1)
+
+        // 2. content_block_start (tool_use)
+        let blockStartEvent = try json("""
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "search"}}
+        """)
+        let blockStartLines = encoder.encode(blockStartEvent, state: &state)
+        #expect(blockStartLines.count == 1)
+
+        // 3. content_block_delta (first json fragment)
+        let delta1Event = try json("""
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\\"q\\":"}}
+        """)
+        let delta1Lines = encoder.encode(delta1Event, state: &state)
+        #expect(delta1Lines.count == 1)
+
+        // 4. content_block_delta (second json fragment)
+        let delta2Event = try json("""
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "\\"cats\\"}"}}
+        """)
+        let delta2Lines = encoder.encode(delta2Event, state: &state)
+        #expect(delta2Lines.count == 1)
+
+        // 5. content_block_stop
+        let blockStopEvent = try json("""
+        {"type": "content_block_stop", "index": 0}
+        """)
+        let blockStopLines = encoder.encode(blockStopEvent, state: &state)
+        #expect(blockStopLines.isEmpty)
+        #expect(state.toolCallIndex == 1)
+
+        // 6. message_delta
+        let messageDeltaEvent = try json("""
+        {"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 15}}
+        """)
+        let messageDeltaLines = encoder.encode(messageDeltaEvent, state: &state)
+        #expect(messageDeltaLines.count == 1)
+
+        // Verify the message_delta SSE line contains "tool_calls" as finish_reason
+        let deltaResponse = try decodeSSELine(messageDeltaLines[0])
+        #expect(deltaResponse.choices[0].finishReason == "tool_calls")
+
+        // 7. message_stop
+        let messageStopEvent = try json("""
+        {"type": "message_stop"}
+        """)
+        let messageStopLines = encoder.encode(messageStopEvent, state: &state)
+        #expect(messageStopLines.count == 2)
     }
 }
