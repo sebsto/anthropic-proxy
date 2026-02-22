@@ -1,5 +1,4 @@
 AWS_PROFILE ?= default
-TEST_BIN_NAME = anthropic-proxyPackageTests
 
 build:
 	container build -t anthropic-proxy -f ./Containerfile .
@@ -10,32 +9,9 @@ test:
 coverage:
 	swift test --enable-code-coverage
 
-# Find the test binary (macOS .xctest bundle vs Linux flat binary)
-define find_test_bin
-$$(BIN_DIR=$$(swift build --show-bin-path) && \
-  if [ -f "$$BIN_DIR/$(TEST_BIN_NAME).xctest/Contents/MacOS/$(TEST_BIN_NAME)" ]; then \
-    echo "$$BIN_DIR/$(TEST_BIN_NAME).xctest/Contents/MacOS/$(TEST_BIN_NAME)"; \
-  else \
-    echo "$$BIN_DIR/$(TEST_BIN_NAME)"; \
-  fi)
-endef
-
-define find_profdata
-$$(find .build -name 'default.profdata' -type f 2>/dev/null | head -1)
-endef
-
 coverage-report: coverage
-	@BIN=$(find_test_bin) && \
-	PROFILE=$(find_profdata) && \
-	xcrun llvm-cov report "$$BIN" -instr-profile="$$PROFILE" \
-		-ignore-filename-regex='\.build|Tests'
-
-coverage-lcov: coverage
-	@BIN=$(find_test_bin) && \
-	PROFILE=$(find_profdata) && \
-	xcrun llvm-cov export "$$BIN" -instr-profile="$$PROFILE" -format=lcov \
-		-ignore-filename-regex='\.build|Tests' > coverage.lcov && \
-	echo "Written to coverage.lcov"
+	@CODECOV=$$(swift test --enable-code-coverage --show-codecov-path 2>/dev/null) && \
+	swift scripts/coverage-report.swift "$$CODECOV"
 
 run:
 	@eval "$$(aws configure export-credentials --profile $(AWS_PROFILE) --format env)" && \
@@ -48,4 +24,4 @@ run:
 		-e AWS_REGION="$$(aws configure get region --profile $(AWS_PROFILE) 2>/dev/null || echo us-east-1)" \
 		anthropic-proxy
 
-.PHONY: build test coverage coverage-report coverage-lcov run
+.PHONY: build test coverage coverage-report run

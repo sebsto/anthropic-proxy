@@ -34,20 +34,5 @@ jobs:
 
     - name: Generate coverage report
       run: |
-        BIN_DIR=$(swift build --show-bin-path)
-        BIN="${BIN_DIR}/anthropic-proxyPackageTests"
-        PROFILE=$(find .build -name 'default.profdata' -type f | head -1)
-
-        # Print summary to CI log
-        llvm-cov report "${BIN}" -instr-profile="${PROFILE}" \
-          -ignore-filename-regex='\.build|Tests'
-
-        # Export LCOV for upload
-        llvm-cov export "${BIN}" -instr-profile="${PROFILE}" -format=lcov \
-          -ignore-filename-regex='\.build|Tests' > coverage.lcov
-
-    - name: Upload coverage artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-lcov
-        path: coverage.lcov
+        CODECOV=$(swift test --enable-code-coverage --show-codecov-path)
+        swift scripts/coverage-report.swift "$CODECOV"
