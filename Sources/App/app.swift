@@ -55,10 +55,15 @@ struct ProxyCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        let retryingClient = RetryingHTTPClient(
+            wrapped: httpClient,
+            logger: logger
+        )
+
         let app = buildApplication(
             config: config,
             signingClient: signingClient,
-            httpClient: httpClient,
+            httpClient: retryingClient,
             logger: logger
         )
 
