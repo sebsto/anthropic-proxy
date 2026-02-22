@@ -85,10 +85,6 @@ struct ChatCompletionsHandler<Signer: RequestSigning, Client: HTTPRequestSending
         } catch let error as TranslationError {
             let message: String
             switch error {
-            case .missingModel:
-                message = "The 'model' field is required."
-            case .emptyMessages:
-                message = "The 'messages' field must be a non-empty array."
             case .missingFunctionDefinition(let index):
                 message = "Tool at index \(index) is missing a function definition."
             }

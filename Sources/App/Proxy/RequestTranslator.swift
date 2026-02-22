@@ -17,8 +17,6 @@ struct RequestTranslation: Sendable {
 // MARK: - Errors
 
 enum TranslationError: Error {
-    case missingModel
-    case emptyMessages
     case missingFunctionDefinition(toolIndex: Int)
 }
 
@@ -41,22 +39,17 @@ struct RequestTranslator: Sendable {
         bedrockModelId: String
     ) throws -> RequestTranslation {
 
-        // 1. Model resolution
-        guard let originalModel = request["model"]?.stringValue, !originalModel.isEmpty else {
-            throw TranslationError.missingModel
-        }
-        // 2. Messages
-        guard let messagesArray = request["messages"]?.arrayValue, !messagesArray.isEmpty else {
-            throw TranslationError.emptyMessages
-        }
+        // 1. Model & messages (already validated by the handler)
+        let originalModel = request["model"]?.stringValue ?? ""
+        let messagesArray = request["messages"]?.arrayValue ?? []
 
-        // 3. Streaming
+        // 2. Streaming
         let isStreaming = request["stream"]?.boolValue ?? false
 
-        // 4. stream_options → includeUsage
+        // 3. stream_options → includeUsage
         let includeUsage = request["stream_options"]?["include_usage"]?.boolValue ?? false
 
-        // 5. System messages
+        // 4. System messages
         let systemMessages = messagesArray.filter { $0["role"]?.stringValue == "system" }
         let systemText = systemMessages.compactMap { msg -> String? in
             extractTextFromContent(msg["content"])
@@ -64,10 +57,10 @@ struct RequestTranslator: Sendable {
 
         let nonSystemMessages = messagesArray.filter { $0["role"]?.stringValue != "system" }
 
-        // 6. Translate messages (with adjacent tool-result merging)
+        // 5. Translate messages (with adjacent tool-result merging)
         let anthropicMessages = translateMessages(nonSystemMessages)
 
-        // 7. Tools
+        // 6. Tools
         let anthropicTools: [AnthropicTool]? = try request["tools"]?.arrayValue.flatMap { tools -> [AnthropicTool]? in
             guard !tools.isEmpty else { return nil }
             return try tools.enumerated().map { index, tool in
@@ -82,7 +75,7 @@ struct RequestTranslator: Sendable {
             }
         }
 
-        // 8. tool_choice
+        // 7. tool_choice
         let anthropicToolChoice: AnthropicToolChoice? = request["tool_choice"].flatMap { choice in
             if let str = choice.stringValue {
                 switch str {
@@ -98,16 +91,16 @@ struct RequestTranslator: Sendable {
             return nil
         }
 
-        // 9. max_tokens
+        // 8. max_tokens
         let maxTokens = request["max_tokens"]?.intValue
             ?? request["max_completion_tokens"]?.intValue
             ?? 8192
 
-        // 10. Temperature / topP
+        // 9. Temperature / topP
         let temperature = request["temperature"]?.doubleValue
         let topP = request["top_p"]?.doubleValue
 
-        // 11. stop → stop_sequences
+        // 10. stop → stop_sequences
         let stopSequences: [String]? = request["stop"].flatMap { stop in
             if let str = stop.stringValue {
                 return [str]
@@ -122,7 +115,7 @@ struct RequestTranslator: Sendable {
         let action = isStreaming ? "invoke-with-response-stream" : "invoke"
         let bedrockPath = "/model/\(bedrockModelId)/\(action)"
 
-        // 12. Assemble the Bedrock request body
+        // 11. Assemble the Bedrock request body
         let bedrockBody = BedrockInvokeRequest(
             anthropicVersion: "bedrock-2023-05-31",
             maxTokens: maxTokens,
