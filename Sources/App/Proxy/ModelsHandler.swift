@@ -127,34 +127,27 @@ struct ModelsHandler<Signer: RequestSigning, Client: HTTPRequestSending>: Sendab
             input = String(input.dropFirst("anthropic/".count))
         }
 
-        let bedrockId: String
+        // Ensure cache is populated (at most one fetch).
+        // Uses try? because raw Bedrock IDs (anthropic.*) don't need the cache to resolve —
+        // it's only needed for inference profile lookup, which is best-effort.
+        if await cache.get() == nil {
+            _ = try? await fetchModels()
+        }
 
+        // Resolve bedrockId — works even without cache for raw Bedrock IDs
+        let bedrockId: String
         if input.contains("anthropic.") {
             bedrockId = input
-            // Populate cache (including inference profiles) if not yet loaded
-            if await cache.get() == nil {
-                _ = try? await fetchModels()
-            }
         } else {
-            let models = try await fetchModels()
             guard let cached = await cache.get() else {
                 throw ModelError.modelNotFound(clientModel)
             }
-
             if let id = cached.mapping[input] {
                 bedrockId = id
             } else {
                 let normalized = input.replacingOccurrences(of: ".", with: "-")
-                var found: String?
-                for model in models {
-                    if model.id.hasPrefix(normalized) {
-                        if let id = cached.mapping[model.id] {
-                            found = id
-                            break
-                        }
-                    }
-                }
-                guard let id = found else {
+                guard let id = cached.models.first(where: { $0.id.hasPrefix(normalized) })
+                    .flatMap({ cached.mapping[$0.id] }) else {
                     throw ModelError.modelNotFound(clientModel)
                 }
                 bedrockId = id
