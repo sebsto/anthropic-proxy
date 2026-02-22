@@ -19,20 +19,17 @@ struct Config: Sendable {
         reader: ConfigReader
     ) {
         self.hostname = hostnameOverride
-            ?? reader.string(forKey: "PROXY_HOST")
-            ?? "127.0.0.1"
+            ?? reader.string(forKey: "PROXY_HOST", default: "127.0.0.1")
         self.port = portOverride
-            ?? reader.int(forKey: "PROXY_PORT")
-            ?? 8080
+            ?? reader.int(forKey: "PROXY_PORT", default: 8080)
         self.region = reader.string(forKey: "AWS_REGION")
-            ?? reader.string(forKey: "AWS_DEFAULT_REGION")
-            ?? "us-east-1"
+            ?? reader.string(forKey: "AWS_DEFAULT_REGION", default: "us-east-1")
         self.proxyAPIKey = reader.string(forKey: "PROXY_API_KEY")
-        self.modelCacheTTL = reader.int(forKey: "MODEL_CACHE_TTL_SECONDS") ?? 300
-        self.requestTimeout = reader.int(forKey: "REQUEST_TIMEOUT_SECONDS") ?? 600
-        self.modelsTimeout = reader.int(forKey: "MODELS_TIMEOUT_SECONDS") ?? 30
+        self.modelCacheTTL = reader.int(forKey: "MODEL_CACHE_TTL_SECONDS", default: 300)
+        self.requestTimeout = reader.int(forKey: "REQUEST_TIMEOUT_SECONDS", default: 600)
+        self.modelsTimeout = reader.int(forKey: "MODELS_TIMEOUT_SECONDS", default: 30)
         self.awsProfile = awsProfileOverride ?? reader.string(forKey: "AWS_PROFILE")
-        self.logLevel = reader.string(forKey: "LOG_LEVEL") ?? "info"
+        self.logLevel = reader.string(forKey: "LOG_LEVEL", default: "info")
     }
 
     init(
