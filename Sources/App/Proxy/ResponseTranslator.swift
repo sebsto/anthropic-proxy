@@ -6,6 +6,15 @@ import Foundation
 
 struct ResponseTranslator: Sendable {
 
+    /// Translates a non-streaming Bedrock Anthropic response into an OpenAI-compatible ``ChatCompletionResponse``.
+    ///
+    /// Extracts text content, tool calls, usage, and stop reason from the Bedrock response
+    /// and assembles a single-choice completion response.
+    ///
+    /// - Parameters:
+    ///   - response: The Bedrock response decoded as a loose JSON dictionary.
+    ///   - originalModel: The model name from the client's original request, echoed back in the response.
+    /// - Returns: A fully populated ``ChatCompletionResponse``.
     func translate(
         _ response: [String: JSONValue],
         originalModel: String
@@ -52,6 +61,7 @@ struct ResponseTranslator: Sendable {
         )
     }
 
+    /// Maps a Bedrock `stop_reason` to an OpenAI `finish_reason`.
     func mapFinishReason(_ stopReason: String?) -> String? {
         guard let stopReason else { return nil }
 
@@ -71,6 +81,7 @@ struct ResponseTranslator: Sendable {
 
     // MARK: - Private
 
+    /// Joins all `text` blocks from a Bedrock content array into a single string.
     private func extractTextContent(from blocks: [JSONValue]?) -> String? {
         guard let blocks else { return nil }
 
@@ -83,6 +94,7 @@ struct ResponseTranslator: Sendable {
         return texts.joined()
     }
 
+    /// Converts Bedrock `tool_use` content blocks into OpenAI-compatible ``ToolCall`` values.
     private func extractToolCalls(from blocks: [JSONValue]?) -> [ToolCall]? {
         guard let blocks else { return nil }
 
@@ -105,6 +117,7 @@ struct ResponseTranslator: Sendable {
         return calls
     }
 
+    /// Encodes a ``JSONValue`` to a JSON string for use as a tool call's `arguments` field.
     private func serializeJSONValue(_ value: JSONValue) -> String {
         guard let data = try? JSONEncoder().encode(value),
               let string = String(data: data, encoding: .utf8) else {

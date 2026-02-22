@@ -20,6 +20,16 @@ struct OpenAISSEEncoder: Sendable {
 
     var doneSignal: String { "data: [DONE]\n\n" }
 
+    /// Dispatches a Bedrock streaming event to the appropriate handler based on its `type` field.
+    ///
+    /// Each Bedrock event (e.g. `message_start`, `content_block_delta`) is translated into
+    /// zero or more OpenAI SSE `data:` lines. The caller accumulates state across calls
+    /// via the `state` parameter.
+    ///
+    /// - Parameters:
+    ///   - event: A single Bedrock event stream payload decoded as a JSON dictionary.
+    ///   - state: Mutable streaming state tracking the current message ID, token counts, and tool call index.
+    /// - Returns: An array of SSE-formatted strings ready to write to the response body.
     func encode(_ event: [String: JSONValue], state: inout StreamState) -> [String] {
         switch event["type"]?.stringValue {
         case "message_start":
@@ -41,6 +51,7 @@ struct OpenAISSEEncoder: Sendable {
 
     // MARK: - Event Handlers
 
+    /// Handles `message_start`: initializes stream state and emits the opening SSE chunk with an empty assistant delta.
     private func encodeMessageStart(
         _ event: [String: JSONValue],
         state: inout StreamState
@@ -61,6 +72,7 @@ struct OpenAISSEEncoder: Sendable {
         return [makeChunk(state: state, choices: [choice])]
     }
 
+    /// Handles `content_block_start`: emits a tool-call header chunk when a `tool_use` block begins.
     private func encodeContentBlockStart(
         _ event: [String: JSONValue],
         state: inout StreamState
@@ -99,6 +111,7 @@ struct OpenAISSEEncoder: Sendable {
         }
     }
 
+    /// Handles `content_block_delta`: emits text or tool-call argument fragments as SSE chunks.
     private func encodeContentBlockDelta(
         _ event: [String: JSONValue],
         state: inout StreamState
@@ -137,6 +150,7 @@ struct OpenAISSEEncoder: Sendable {
         }
     }
 
+    /// Handles `content_block_stop`: advances the tool call index when a `tool_use` block ends.
     private func encodeContentBlockStop(state: inout StreamState) -> [String] {
         if state.currentBlockIsToolUse {
             state.toolCallIndex += 1
@@ -145,6 +159,7 @@ struct OpenAISSEEncoder: Sendable {
         return []
     }
 
+    /// Handles `message_delta`: emits the finish reason and records output token count.
     private func encodeMessageDelta(
         _ event: [String: JSONValue],
         state: inout StreamState
@@ -167,6 +182,7 @@ struct OpenAISSEEncoder: Sendable {
         return [makeChunk(state: state, choices: [choice])]
     }
 
+    /// Handles `message_stop`: emits a final usage chunk (if requested) followed by the `[DONE]` sentinel.
     private func encodeMessageStop(state: inout StreamState) -> [String] {
         var lines: [String] = []
 
@@ -186,6 +202,7 @@ struct OpenAISSEEncoder: Sendable {
 
     // MARK: - Chunk Builder
 
+    /// Serializes a ``ChatCompletionResponse`` chunk into an SSE `data:` line.
     private func makeChunk(
         state: StreamState,
         choices: [Choice],

@@ -26,20 +26,25 @@ enum TranslationError: Error {
 
 struct RequestTranslator: Sendable {
 
+    /// Translates a loose OpenAI-compatible chat completion request into a Bedrock invoke request.
+    ///
+    /// Extracts model, messages, tools, streaming options, and sampling parameters from the
+    /// incoming dictionary and assembles an Anthropic-formatted ``BedrockInvokeRequest``.
+    ///
+    /// - Parameters:
+    ///   - request: The inbound request decoded as a loose JSON dictionary.
+    ///   - bedrockModelId: The resolved Bedrock model identifier to invoke.
+    /// - Returns: A ``RequestTranslation`` containing the Bedrock path, body, and metadata.
+    /// - Throws: ``TranslationError`` if required fields are missing or malformed.
     func translate(
         _ request: [String: JSONValue],
-        resolveModel: (String) throws -> String
+        bedrockModelId: String
     ) throws -> RequestTranslation {
 
         // 1. Model resolution
         guard let originalModel = request["model"]?.stringValue, !originalModel.isEmpty else {
             throw TranslationError.missingModel
         }
-        let strippedModel = originalModel.hasPrefix("anthropic/")
-            ? String(originalModel.dropFirst("anthropic/".count))
-            : originalModel
-        let bedrockModelId = try resolveModel(strippedModel)
-
         // 2. Messages
         guard let messagesArray = request["messages"]?.arrayValue, !messagesArray.isEmpty else {
             throw TranslationError.emptyMessages
@@ -141,6 +146,11 @@ struct RequestTranslator: Sendable {
 
     // MARK: - Message Translation
 
+    /// Converts non-system OpenAI messages into Anthropic messages.
+    ///
+    /// Handles user, assistant, and tool-result roles. Adjacent tool-result messages
+    /// are merged into a single `user` message with multiple `tool_result` blocks,
+    /// as required by the Anthropic API.
     private func translateMessages(_ messages: [JSONValue]) -> [AnthropicMessage] {
         var result: [AnthropicMessage] = []
 
@@ -190,6 +200,7 @@ struct RequestTranslator: Sendable {
 
     // MARK: - User Message
 
+    /// Translates an OpenAI `user` message into an Anthropic message with text content blocks.
     private func translateUserMessage(_ message: JSONValue) -> AnthropicMessage {
         let content: AnthropicContent
         let rawContent = message["content"]
@@ -210,6 +221,9 @@ struct RequestTranslator: Sendable {
 
     // MARK: - Assistant Message
 
+    /// Translates an OpenAI `assistant` message into an Anthropic message.
+    ///
+    /// Converts text content and `tool_calls` into Anthropic `text` and `tool_use` blocks.
     private func translateAssistantMessage(_ message: JSONValue) -> AnthropicMessage {
         var blocks: [AnthropicContentBlock] = []
 
@@ -248,6 +262,7 @@ struct RequestTranslator: Sendable {
 
     // MARK: - Helpers
 
+    /// Converts a generic content value (string or array of parts) into ``AnthropicContent``.
     private func translateContent(_ content: JSONValue?) -> AnthropicContent {
         guard let content else { return .string("") }
         if let text = content.stringValue {
@@ -263,6 +278,7 @@ struct RequestTranslator: Sendable {
         return .string("")
     }
 
+    /// Extracts plain text from a content value that may be a string or an array of text parts.
     private func extractTextFromContent(_ content: JSONValue?) -> String? {
         guard let content else { return nil }
         if let text = content.stringValue {
@@ -275,6 +291,7 @@ struct RequestTranslator: Sendable {
         return nil
     }
 
+    /// Parses a JSON-encoded string into a ``JSONValue``, falling back to a plain string on failure.
     private func parseJSONArguments(_ jsonString: String) -> JSONValue {
         guard let data = jsonString.data(using: .utf8),
               let value = try? JSONDecoder().decode(JSONValue.self, from: data) else {

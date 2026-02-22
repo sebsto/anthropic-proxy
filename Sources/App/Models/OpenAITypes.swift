@@ -5,6 +5,8 @@ import Foundation
 #endif
 
 // MARK: - Outbound Messages
+// Encodable is used in production to serialize OpenAI-compatible JSON responses.
+// Decodable exists only so tests can decode and verify the output shape.
 
 struct ChatMessage: Sendable {
     var role: String
