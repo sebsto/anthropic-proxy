@@ -1,6 +1,6 @@
 # anthropic-proxy
 
-A self-hosted Swift 6 proxy that sits between Xcode 26 and Amazon Bedrock, translating between the OpenAI Chat Completions API and Bedrock's SigV4-signed, binary EventStream protocol.
+A self-hosted proxy that sits between Xcode 26 and Amazon Bedrock, translating between the OpenAI Chat Completions API and Bedrock's SigV4-signed, binary EventStream protocol. Written 100% in Swift.
 
 ## How It Works
 
