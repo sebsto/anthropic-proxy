@@ -11,14 +11,24 @@ import NIOCore
 struct APIKeyAuthMiddleware<Context: RequestContext>: RouterMiddleware {
     let apiKey: String
 
-    private var xAPIKeyName: HTTPField.Name { HTTPField.Name("x-api-key")! }
+    private var xAPIKeyName: HTTPField.Name {
+        HTTPField.Name("x-api-key")!
+    }
+
+    private var authenticationKeyName: HTTPField.Name {
+        HTTPField.Name("Authorization")!
+    }
 
     func handle(
         _ input: Request,
         context: Context,
         next: (Request, Context) async throws -> Response
     ) async throws -> Response {
-        guard input.headers[values: xAPIKeyName].contains(where: { $0 == apiKey }) else {
+        debugPrint("xAPIKeyName \(xAPIKeyName)")
+        guard (
+            input.headers[values: xAPIKeyName].contains(where: { $0 == apiKey }) ||
+            input.headers[values: authenticationKeyName].contains(where: { $0 == "Bearer \(apiKey)" })
+        ) else {
             let error = OpenAIErrorResponse(error: OpenAIError(
                 message: "Invalid API key",
                 type: "invalid_request_error",
